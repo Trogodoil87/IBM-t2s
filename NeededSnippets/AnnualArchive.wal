@@ -1,0 +1,93 @@
+¢+defVar --name in_Config --type StringDictionary --innertype String --parameter 
+defVar --name in_sPathToFrame --type String --parameter 
+defVar --name exInstance --type Excel
+defVar --name dtQueue --type DataTable
+defVar --name FilteredDT --type DataTable
+defVar --name iGetExcelFilteredDTRows --type Numeric
+defVar --name sFoldersListAsText --type String
+defVar --name sFoldersList --type List --innertype String
+defVar --name bArchivingFolderExists --type Boolean
+defVar --name sPathToArchiveDir --type String
+defVar --name dCurrentDateTime --type DateTime
+defVar --name iDay --type Numeric
+defVar --name iMonth --type Numeric
+defVar --name sPathToAnnualyDir --type String
+defVar --name sFolderName --type String
+defVar --name sPathToFolder --type String
+defVar --name iYear --type Numeric
+defVar --name sDateConcat --type String
+defVar --name in_sQueuePath --type String --parameter 
+defVar --name in_sQueueName --type String --parameter 
+defVar --name sAnnualFileName --type String
+defVar --name bAnnualFileExists --type Boolean
+//#in_Config, in_sPathToFrame, in_sQueueName, in_sQueuePath
+getCurrentDateAndTime --localorutc "LocalTime" dCurrentDateTime=value
+//Fake Part Start
+setVar --name "${dCurrentDateTime}" --value "2022-01-01 12:00:00"
+//Fake Part End
+getDatePart --date "${dCurrentDateTime}" --type "Days" iDay=value
+getDatePart --date "${dCurrentDateTime}" --type "Months" iMonth=value
+getDatePart --date "${dCurrentDateTime}" --type "Years" iYear=value
+concatTexts --text "${iYear}_${iMonth}" --value "_${iDay}" sDateConcat=value
+
+case --name "1st of Jannuary" --switches "CaseSwitchesAll"
+	when --left "${iDay}" --operator "Equal_To" --right 1 --comment "iDay = 1"
+	when --left "${iMonth}" --operator "Equal_To" --right 1 --comment "iMonth = 1"
+then
+	logMessage --message "--Annual Archiving Starting---" --type "Info"
+	//excelOpen --file "${in_sQueuePath}" exInstance=value
+	excelOpen --file "${in_sPathToFrame}IBM RobotData\\${in_sQueueName}.xlsx" exInstance=value
+	excelGetTable --file ${exInstance} --getfirstsheet  --entiretable  --hasheaders  dtQueue=value
+	//filterTable --where "(Status = \'Progress\') or (Status = \'New\') or (Status = \'Failed\' and Retries < 3)" --dataTable ${dtQueue} FilteredDT=value iGetExcelFilteredDTRows=rows
+	filterTable --where "(Status = \'Success1\') or (Status = \'New\') or (Status = \'Failed\' and Retries < 3)" --dataTable ${dtQueue} FilteredDT=value iGetExcelFilteredDTRows=rows
+	
+	if --left "${iGetExcelFilteredDTRows}" --operator "Equal_To" --right 0
+		strDictGet --key FoldersForArchive --dictionary ${in_Config} sFoldersListAsText=value
+		trimString --text "${sFoldersListAsText}" --trimoption "TrimStartAndEnd" sFoldersListAsText=value
+		if --left "${sFoldersListAsText.Length}" --operator "Greater_Than" --right 0
+			splitString --text "${sFoldersListAsText}" --delimiteroption "CustomDelimiter" --customdelimiter "," sFoldersList=value
+			logMessage --message "Folders found for archiving: ${sFoldersListAsText}" --type "Info"
+			
+			setVar --name "${sPathToArchiveDir}" --value "${in_sPathToFrame}IBM RobotData\\Archive"
+			ifFolder --path "${sPathToArchiveDir}" bArchivingFolderExists=value
+			if --left "${bArchivingFolderExists}" --operator "Is_True" --negate 
+				logMessage --message "Creating new directory --> ${sPathToArchiveDir}" --type "Info"
+				createDir --path "${in_sPathToFrame}IBM RobotData\\Archive" sPathToArchiveDir=value
+			else
+				logMessage --message "Archiving directory found: ${sPathToArchiveDir}" --type "Warning"
+			endIf
+			
+			setVar --name "${sPathToAnnualyDir}" --value "${sPathToArchiveDir}\\${sDateConcat}_Annual_Archive"
+			ifFolder --path "${sPathToAnnualyDir}" bArchivingFolderExists=value
+			if --left "${bArchivingFolderExists}" --operator "Is_True" --negate 
+				logMessage --message "Creating Annually Folder --> ${sPathToAnnualyDir}" --type "Info"
+				createDir --path "${sPathToAnnualyDir}" sPathToAnnualyDir=value
+			else
+				logMessage --message "Annually Archiving Folder Exists!!! \r\nFolder: ${sPathToAnnualyDir}" --type "Warning"
+				stopExecution --current 
+			endIf
+			
+			fileMove --from "${in_sQueuePath}" --to "${sPathToAnnualyDir}"
+			foreach --collection "${sFoldersList}" --variable "${sFolderName}"
+				setVar --name "${sPathToFolder}" --value "${in_sPathToFrame}IBM RobotData\\${sFolderName}"
+				zip --directorylocation "${sPathToFolder}" --destinationfolder "${sPathToAnnualyDir}" --filename "${sDateConcat}_AnnuallyArchived_${sFolderName}" --scansubdirectories 
+			endFor
+			
+			setVar --name "${sAnnualFileName}" --value "${iYear}_AnnualFilesArchive"
+			ifFile --file "${sPathToArchiveDir}\\${sAnnualFileName}" bAnnualFileExists=value
+			if --left "${bAnnualFileExists}" --operator "Is_True" --negate 
+				zip --directorylocation "${sPathToAnnualyDir}" --destinationfolder "${sPathToArchiveDir}" --filename "${sAnnualFileName}"
+				deleteDir --directoryname "${sPathToAnnualyDir}"
+				logMessage --message "Succesfully Created Annually File --> ${sPathToAnnualyDir}\\${sAnnualFileName}" --type "Info"
+			else
+				logMessage --message "Cannot archive final file." --type "Warning"
+			endIf
+		else
+			logMessage --message "Please input at least one folder name." --type "Error"
+		endIf
+	else
+		logMessage --message "There are more transactions to process --->\r\n ${FilteredDT}" --type "Warning"
+	endIf
+	excelClose --file ${exInstance} --save 
+	logMessage --message "--Annual Archiving Ending---" --type "Info"
+endCase*21.0.5.0

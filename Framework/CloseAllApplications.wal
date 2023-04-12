@@ -1,0 +1,40 @@
+êdefVar --name success --type Boolean
+defVar --name window --type Window
+defVar --name idx --type Numeric
+defVar --name AzureWindow --type Window
+defVar --name ExcelWindow --type Window
+//#Close any instances of Chrome
+//goSub --label CloseChrome
+//#Close any instances of Azure Explorer
+//goSub --label CloseAzure
+//#Close any instances of Excel
+goSub --label CloseExcel
+beginSub --name CloseChrome
+for --variable ${idx} --from 1 --to 10 --step 1
+	findWindow --useregex  --regexPattern ".*" --regexOptions "0" --classname Chrome_WidgetWin_1 --processname chrome window=value success=success
+	if --left "${success}" --operator "Is_True" --negate 
+		break
+	else
+		closeWindow --window ${window}
+		logMessage --message "${success}" --type "Info"
+	endIf
+next
+endSub
+beginSub --name CloseAzure
+findWindow --useregex  --regexPattern ".*" --regexOptions "0" --classname Chrome_WidgetWin_1 --processname StorageExplorer AzureWindow=value success=success
+if --left "${success}" --operator "Is_True"
+	closeWindow --window ${AzureWindow}
+	logMessage --message "${success}" --type "Info"
+endIf
+endSub
+beginSub --name CloseExcel
+for --variable ${idx} --from 1 --to 10 --step 1
+	findWindow --useregex  --regexPattern ".*" --regexOptions "0" --classname XLMAIN --processname EXCEL ExcelWindow=value success=success
+	if --left "${success}" --operator "Is_True" --negate 
+		break
+	else
+		closeWindow --window ${ExcelWindow}
+		logMessage --message "${success}" --type "Info"
+	endIf
+next
+endSub*21.0.5.0

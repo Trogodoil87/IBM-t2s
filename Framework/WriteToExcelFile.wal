@@ -1,0 +1,21 @@
+ãdefVar --name in_CreatedExcelFilePath --type String --parameter 
+defVar --name CreatedExcelFile --type Excel
+defVar --name in_WriteHeaders --type Boolean --parameter 
+defVar --name in_InsertExcelDT --type DataTable --parameter 
+defVar --name in_ExcelSheetName --type String --parameter 
+defVar --name in_ExcelStartRow --type Numeric --parameter 
+defVar --name in_ExcelStartColumn --type Numeric --parameter 
+defVar --name InsertExcelDTResult --type Boolean
+
+//#in_CreatedExcelFilePath , in_InsertExcelDT , in_ExcelSheetName , in_ExcelStartRow , in_ExcelStartColumn , in_WriteHeaders
+
+logMessage --message "-- WriteToExcelFile: Starting --" --type "Info"
+//logMessage --message "${in_CreatedExcelFilePath}\r\n${in_InsertExcelDT}\r\n${in_ExcelSheetName}\r\n${in_ExcelStartRow}\r\n${in_ExcelStartColumn}\r\n${in_WriteHeaders}" --type "Info"
+excelOpen --file "${in_CreatedExcelFilePath}" CreatedExcelFile=value
+if --left "${in_WriteHeaders}" --operator "Equal_To" --right true
+	excelSetTable --dataTable ${in_InsertExcelDT} --headers  --file ${CreatedExcelFile} --sheet "${in_ExcelSheetName}" --row ${in_ExcelStartRow} --column ${in_ExcelStartColumn} InsertExcelDTResult=value
+else
+	excelSetTable --dataTable ${in_InsertExcelDT} --file ${CreatedExcelFile} --sheet "${in_ExcelSheetName}" --row ${in_ExcelStartRow} --column ${in_ExcelStartColumn} InsertExcelDTResult=value
+endIf
+excelClose --file ${CreatedExcelFile} --save 
+logMessage --message "-- WriteToExcelFile: Closing --" --type "Info"*	20.12.3.0

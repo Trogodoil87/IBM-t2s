@@ -1,0 +1,48 @@
+ódefVar --name in_Config --type StringDictionary --innertype String --parameter 
+defVar --name in_QueuePath --type String --parameter 
+defVar --name bQueueExsist --type Boolean
+defVar --name out_UpdatedID --type String --output 
+defVar --name out_bFilteredDTEmpty --type Boolean --value False --output 
+defVar --name iGetExcelFilteredDTRows --type Numeric
+defVar --name out_FilteredDT --type DataTable --output 
+defVar --name sUpdatedID --type String
+defVar --name in_FilteredDT --type DataTable --parameter 
+defVar --name in_QueueName --type String --parameter  --required 
+//#
+//# in_Config , in_QueuePath
+
+//# out_bFilteredDTEmpty  , out_UpdatedRowNumber
+
+logMessage --message "-- QGetTransaction: Starting --" --type "Info"
+setVar --name "${out_bFilteredDTEmpty}" --value false
+if --left "${in_Config}" --operator "Is_Null_Or_Empty" --negate 
+	ifFile --file "${in_QueuePath}" bQueueExsist=value
+	if --left "${bQueueExsist}" --operator "Is_True"
+		//#Get all rows ready for process
+		//#(Status = 'New') or (Status = 'Failed' and FailureType <>'BE'  and Retries<3) or (Status='Pending')
+		//filterTable --where "(Status = \'New\')or(Status = \'Failed\' and FailureType <>\'BE\' and Retries<\'3\')" --dataTable ${in_FilteredDT} out_FilteredDT=value iGetExcelFilteredDTRows=rows
+		//#(Status = 'Success1')
+		filterTable --where "(Status = \'Success1\')" --dataTable ${in_FilteredDT} out_FilteredDT=value iGetExcelFilteredDTRows=rows
+		//#if FilteredDT is null or empty  ---->No data---->EndProcess
+		if --left "${iGetExcelFilteredDTRows}" --operator "Greater_Than" --right 0 --negate 
+			logMessage --message "File FilteredTD is empty not Transaction for processing" --type "Info"
+			setVar --name "${out_bFilteredDTEmpty}" --value true
+		else
+			logMessage --message "${in_FilteredDT}\r\n${out_FilteredDT}" --type "Info"
+			getTableCell --dataTable ${out_FilteredDT} --column 1 --row 1 sUpdatedID=value
+			sortTable --orderby "Status ASC,CreatedDate" --dataTable ${out_FilteredDT} out_FilteredDT=value
+		endIf
+	else
+		logMessage --message "File ${in_QueueName}.xlsx is not found" --type "Error"
+		stopExecution
+		failTest --message "File ${in_QueueName}.xlsx is not found"
+	endIf
+else
+	logMessage --message "File config.xlsx is not found" --type "Error"
+	stopExecution
+	failTest --message "File config.xlsx is not found"
+endIf
+setVar --name "${out_UpdatedID}" --value "${sUpdatedID}"
+//setVar --name "${out_FilteredDT}" --value "${FilteredDT}"
+//logMessage --message "\r\nQGetTransaction:\r\n${out_FilteredDT}" --type "Info"
+logMessage --message "-- QGetTransaction: Retrieved TransactionID : ${out_UpdatedID} --" --type "Info"*21.0.5.0

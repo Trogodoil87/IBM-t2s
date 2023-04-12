@@ -1,0 +1,121 @@
+ýFdefVar --name sQueuePath --type String
+defVar --name Config --type StringDictionary --innertype String
+defVar --name sUpdatedID --type String
+defVar --name BusinessExceptionMsg --type String
+defVar --name bFilteredDTEmpty --type Boolean
+defVar --name sPathToFrame --type String
+defVar --name Error --type Error
+defVar --name bSetTransactionStatusSucessRun --type Boolean
+defVar --name bSucessRun --type Boolean
+defVar --name FilteredDT --type DataTable
+defVar --name idxInitRetry --type Numeric
+defVar --name sEmailCredentials --type String
+defVar --name username --type String
+defVar --name password --type SecureString
+defVar --name newMailConn --type EmailConnection
+defVar --name MailList --type List --innertype String
+defVar --name AttachmentsList --type List --innertype String
+defVar --name sQueueName --type String
+defVar --name sEmailSubjectQueue --type String
+defVar --name sSendQueueEmailList --type String
+setVar --name "${sPathToFrame}" --value "D:\\RPA ServiceCentrix\\IBM_RPA_Text_To_Speech\\" --comment "~~~~~change path to frame~~~~~"
+setVar --name "${sQueueName}"
+trimString --text "${sPathToFrame}" --trimoption "TrimStartAndEnd" sPathToFrame=value
+repeat
+	//logMessage --message "bSucessRun: ${bSucessRun}" --type "Info"
+	setVars --assignments "${BusinessExceptionMsg}="
+	if --left "${bSucessRun}" --operator "Equal_To" --right false
+		setVar --name "${bSucessRun}" --value true
+		if --left "${Config}" --operator "Is_Null_Or_Empty"
+			executeScript --handleError  --name "${sPathToFrame}IBM Code\\ProcessLayer\\Init.wal" --parameters "in_sPathToFrame=${sPathToFrame},in_bRetryInit=false" --output "out_QueuePath=${sQueuePath},Config=${Config},out_GetExcelTable=${FilteredDT},out_sQueueName=${sQueueName}" --comment Init bSucessRun=value Error=error
+			if --left "${bSucessRun}" --operator "Is_True" --negate 
+				logMessage --message "Error in Init: ${Error}" --type "Info"
+			endIf
+			//#//////////////////////////////////////////////////////////////////////////////////////////////////
+			goSub --label RetryInitModule --comment "RetryInitModule if first start init fail"
+			//#/////////////////////////////////////////////////////////////////////////////////////////////////////
+		endIf
+	endIf
+	//# QUEUE GET TRANSACTION STARTING
+	if --left "${bSucessRun}" --operator "Equal_To" --right true
+		executeScript --handleError  --name "${sPathToFrame}IBM Code\\Framework\\QGetTransaction.wal" --parameters "in_QueuePath=${sQueuePath},in_Config=${Config},in_FilteredDT=${FilteredDT},in_QueueName=${sQueueName}" --output "out_UpdatedID=${sUpdatedID},out_bFilteredDTEmpty=${bFilteredDTEmpty},out_FilteredDT=${FilteredDT}" --comment QGetTransaction bSucessRun=value Error=error
+		if --left "${bSucessRun}" --operator "Equal_To" --right True
+			if --left "${bFilteredDTEmpty}" --operator "Equal_To" --right false
+				executeScript --handleError  --name "${sPathToFrame}IBM Code\\ProcessLayer\\Process.wal" --parameters "in_FilteredDT=${FilteredDT},in_sUpdatedID=${sUpdatedID},in_Config=${Config},in_sQueuePath=${sQueuePath},in_sPathToFrame=${sPathToFrame},in_sQueueName=${sQueueName}" --output "out_BusinessExceptionMsg=${BusinessExceptionMsg},out_FilteredDT=${FilteredDT}" --comment Process bSucessRun=value Error=error
+				//logMessage --message "Process Success: ${bSucessRun}" --type "Info"
+			endIf
+		else
+			setVar --name "${bFilteredDTEmpty}" --value true
+		endIf
+	else
+		setVar --name "${BusinessExceptionMsg}"
+	endIf
+	
+	if --left "${bFilteredDTEmpty}" --operator "Equal_To" --right false
+		executeScript --handleError  --name "${sPathToFrame}IBM Code\\Framework\\SetTransactionStatus.wal" --parameters "in_QueuePath=${sQueuePath},in_Config=${Config},in_sUpdatedID=${sUpdatedID},in_bSuccessRun=${bSucessRun},in_BusinessExceptionMsg=${BusinessExceptionMsg},in_sPathToFrame=${sPathToFrame},in_Error=${Error},in_FilteredDT=${FilteredDT}" --output "in_FilteredDT=${FilteredDT}" --comment SetTransactionStatus bSetTransactionStatusSucessRun=value Error=error
+		executeScript --handleError  --name "${sPathToFrame}IBM Code\\Framework\\UpdateRowFromOneTableToAnother.wal" --parameters "in_sQueuePath=${sQueuePath},in_FilteredDT=${FilteredDT},in_sUpdatedID=${sUpdatedID}" --comment UpdateRowFromOneTableToAnother
+		if --left "${bSetTransactionStatusSucessRun}" --operator "Equal_To" --right false
+			logMessage --message "Error in Set Transaction Status:\r\n${Error}" --type "Info"
+			break
+		endIf
+	else
+		logMessage --message "No Data For Updating bFilteredDTEmpty is Empty" --type "Info"
+		break
+	endIf
+until --left "${bFilteredDTEmpty}" --operator "Is_Null_Or_Empty" --negate 
+//goSub --label SendQueueToSCX --comment "Send QueueToSCX"
+stopExecution
+//#/////////////////////////////////////////////////////////////////////////////////////////////////////
+beginSub --name RetryInitModule --comment RetryInitModule
+if --left "${bSucessRun}" --operator "Equal_To" --right false
+	for --variable ${idxInitRetry} --from 0 --to 1 --step 1
+		logMessage --message "--- Retry Init: ${idxInitRetry} ---" --type "Info"
+		executeScript --handleError  --name "${sPathToFrame}IBM Code\\ProcessLayer\\Init.wal" --parameters "in_sPathToFrame=${sPathToFrame},in_bRetryInit=true" --output "out_QueuePath=${sQueuePath},Config=${Config},out_GetExcelTable=${FilteredDT}" --comment Init bSucessRun=value Error=error
+		if --left "${bSucessRun}" --operator "Is_True" --negate 
+			logMessage --message "Error in Init: ${Error}" --type "Info"
+		endIf
+		if --left "${bSucessRun}" --operator "Equal_To" --right true
+			break
+		endIf
+	next
+endIf
+endSub
+beginSub --name SendQueueToSCX
+strDictGet --key EmailCredentials --dictionary ${Config} --comment "Get credentials for Ekont mail from Config" sEmailCredentials=value
+strDictGet --key SendQueueEmailList --dictionary ${Config} --comment "Get credentials for Ekont mail from Config" sSendQueueEmailList=value
+strDictGet --key QueueEmailSubject --dictionary ${Config} --comment "Get credentials for Ekont mail from Config" sEmailSubjectQueue=value
+splitString --text "${sSendQueueEmailList}" --delimiteroption "CustomDelimiter" --customdelimiter "," MailList=value
+getVaultItem --name "${sEmailCredentials}" --system  username=userName password=password
+outlookConnect --mailusername "${username}" --mailpassword "${password}" newMailConn=value
+add --collection "${AttachmentsList}" --value "${sQueuePath}"
+emailSend --connection ${newMailConn} --to ${MailList} --from "${username}" --subject "${sEmailSubjectQueue}" --bodytype "Text" --body "Queue File - ${sQueueName}" --attachments ${AttachmentsList} --comment "Connect to Outlook and send Error Mail"
+emailDisconnect --connection ${newMailConn}
+endSub
+beginSub --name MoveFiles
+//filterTable --where "([CallStatus]=\'\' and [CampaignName]<>\'\')" --dataTable ${dtCalls} iTotalRowsOf_dtFilteredCalls=rows
+//if --left "${iTotalRowsOf_dtFilteredCalls}" --operator "Equal_To" --right 0
+//strDictGet --key ArchiveFolderName --dictionary ${in_Config} --comment "Archive Folder Name" sArchiveFolderName=value
+//strDictGet --key FinalFileSuffix --dictionary ${in_Config} --comment "File Suffix" sFileSuffix=value
+//strDictGet --key RegexExtension --dictionary ${in_Config} --comment "Regex Pattern For File Extension Extraction" sRegexExtension=value
+//getRegex --text "${sFileNameWithPrefix_CurrentTrans}" --regexPattern "${sRegexExtension}" --regexOptions "0" --groupnumber 1 --comment "File Name Without File Extension" sFileExtension=value
+
+//strDictGet --key RegexCampaign --dictionary ${in_Config} --comment "Camaign Regex Pattern" sRegexCampaignPattern=value
+//getRegex --text "${sFileNameWithPrefix_CurrentTrans}" --regexPattern "${sRegexCampaignPattern}" --regexOptions "0" --groupnumber 1 sCampaign=value
+//replaceText --texttoparse "${sFileNameWithPrefix_CurrentTrans}" --textpattern ".${sFileExtension}" sFileNameWithPrefix_CurrentTrans=value
+//fileRename --file "${sOutputFile_FullPath_CurrentTrans}" --newname "${sFileNameWithPrefix_CurrentTrans}${sFileSuffix}.${sFileExtension}" sOutputFile_FullPath_CurrentTrans=value
+//setVar --name "${sFileNameWithPrefix_CurrentTrans}" --value "${sFileNameWithPrefix_CurrentTrans}.${sFileExtension}"
+
+//delay --timeout "00:00:01"
+//fileMove --from "${sOutputFile_FullPath_CurrentTrans}" --to "${sPathToCurrentProcessingFolder}\\${sArchiveFolderName}" --comment "Moving Source File To Archive Directory" bMovedSuccessfully=value
+//if --left "${bMovedSuccessfully}" --operator "Is_True"
+//getCurrentDateAndTime --localorutc "LocalTime" dCurrentDateTime=value
+//logMessage --message "--Successfully Moved File--\r\nFrom: ${sOutputFile_FullPath_CurrentTrans}\r\nTo: ${sPathToCurrentProcessingFolder}\\${sArchiveFolderName}" --type "Info"
+//goSub --label Delete_ConstantConfigFile
+//goSub --label Send_Notification_Email
+//else
+//setVar --name "${out_BusinessExceptionMsg}" --value "Failed to move file ${sOutputFile_FullPath_CurrentTrans} to Archive folder"
+//failTest --message "${out_BusinessExceptionMsg}"
+//endIf
+
+//endIf
+endSub*21.0.5.0

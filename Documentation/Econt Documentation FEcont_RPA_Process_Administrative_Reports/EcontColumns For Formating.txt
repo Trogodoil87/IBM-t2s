@@ -1,0 +1,25 @@
+Изпратени преводи
+Number-L,R,S
+Colour-R
+
+Получени преводи
+Number-M,S,T
+Colour-T
+
+Изпратени пратки
+Number-o,p,v,w
+Colour-o
+
+Получени пратки
+Number-N,O,T,V
+Colour-N
+
+Получени наложени платежи
+Number-O,P,U,V
+Colour-o
+
+Заплатени наложени платежи
+Number-N,O
+Colour-N
+
+ABCDEFGHIJKLMNOPQRSTUVWXYZ

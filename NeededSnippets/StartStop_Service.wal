@@ -1,0 +1,80 @@
+ó+defVar --name out_sServiceStatus --type String --output 
+defVar --name sSendServiceStatus --type String
+defVar --name in_Config --type StringDictionary --innertype String --parameter  --required 
+defVar --name sAllowedIntervalForCalls_StartHour --type String
+defVar --name sAllowedIntervalForCalls_EndHour --type String
+defVar --name sHour --type String
+defVar --name sMinute --type String
+defVar --name iHour --type Numeric
+defVar --name iMinute --type Numeric
+defVar --name dCurrentDateTime --type DateTime
+defVar --name in_sPathToFrame --type String --parameter  --required 
+logMessage --message "--- Starting StartStop_Service ---" --type "Info"
+getCurrentDateAndTime --localorutc "LocalTime" dCurrentDateTime=value
+logMessage --message "${dCurrentDateTime}" --type "Info"
+executeScript --name "${in_sPathToFrame}\\IBM Code\\NeededSnippets\\GetServiceStatus.wal" --output "out_sServiceStatus=${out_sServiceStatus}" --comment "GetServiceStatus.wal"
+logMessage --message "ServiceStatus:\\${out_sServiceStatus}\\" --type "Info"
+strDictGet --key AllowedIntervalForCalls_StartHour --dictionary ${in_Config} sAllowedIntervalForCalls_StartHour=value
+strDictGet --key AllowedIntervalForCalls_EndHour --dictionary ${in_Config} sAllowedIntervalForCalls_EndHour=value
+case --switches "CaseSwitchesAll"
+	when --left "${sAllowedIntervalForCalls_StartHour}" --operator "Is_Null_Or_Empty" --negate 
+	when --left "${sAllowedIntervalForCalls_EndHour}" --operator "Is_Null_Or_Empty" --negate 
+then
+	setVars --assignments "${sSendServiceStatus}=,${sHour}=,${sMinute}="
+	if --left "${out_sServiceStatus}" --operator "Equal_To" --right true
+		goSub --label StopService
+	elseIf --left "${out_sServiceStatus}" --operator "Equal_To" --right false --comment "${out_sServiceStatus}=false"
+		goSub --label StartService
+	endIf
+	
+	
+	delay --timeout "00:00:03"
+	setVar --name "${out_sServiceStatus}"
+	executeScript --name "${in_sPathToFrame}\\IBM Code\\NeededSnippets\\GetServiceStatus.wal" --output "out_sServiceStatus=${out_sServiceStatus}" --comment "GetServiceStatus.wal"
+endCase
+logMessage --message "-- Final Service Status is:\\${out_sServiceStatus}\\ --" --type "Info"
+logMessage --message "--- Ending StartStop_Service ---" --type "Info"
+beginSub --name StopService
+getRegex --text "${sAllowedIntervalForCalls_EndHour}" --regexPattern "(\\d{2})\\:" --regexOptions "IgnoreCase, Singleline" --groupnumber 1 sHour=value
+if --left "${sHour}" --operator "Is_Null_Or_Empty" --negate 
+	convertStringToNumber --culture "en-US" --text "${sHour}" iHour=value
+endIf
+getRegex --text "${sAllowedIntervalForCalls_EndHour}" --regexPattern "\\:(\\d{2})" --regexOptions "IgnoreCase, Singleline" --groupnumber 1 sMinute=value
+if --left "${sMinute}" --operator "Is_Null_Or_Empty" --negate 
+	convertStringToNumber --culture "en-US" --text "${sMinute}" iMinute=value
+endIf
+
+if --left "${dCurrentDateTime.Hour}" --operator "Equal_To" --right "${iHour}"
+	if --left "${dCurrentDateTime.Minute}" --operator "Greater_Than_Equal_To" --right "${iMinute}"
+		setVar --name "${sSendServiceStatus}" --value false
+		//executeScript --name "${in_sPathToFrame}\\IBM Code\\NeededSnippets\\SetServiceStatus.wal" --parameters "in_sSendServiceStatus=${sSendServiceStatus}" --comment "SetServiceStatus.wal"
+		logMessage --message "-- Starting Service at :${dCurrentDateTime}" --type "Info"
+	endIf
+elseIf --left "${dCurrentDateTime.Hour}" --operator "Greater_Than" --right "${iHour}" --comment "${dCurrentDateTime.Hour}>${iHour}"
+	setVar --name "${sSendServiceStatus}" --value false
+	executeScript --name "${in_sPathToFrame}\\IBM Code\\NeededSnippets\\SetServiceStatus.wal" --parameters "in_sSendServiceStatus=${sSendServiceStatus}" --comment "SetServiceStatus.wal"
+	logMessage --message "-- Stoping Service at :${dCurrentDateTime}" --type "Info"
+endIf
+endSub
+beginSub --name StartService
+getRegex --text "${sAllowedIntervalForCalls_StartHour}" --regexPattern "(\\d{2})\\:" --regexOptions "IgnoreCase, Singleline" --groupnumber 1 sHour=value
+getRegex --text "${sAllowedIntervalForCalls_StartHour}" --regexPattern "\\:(\\d{2})" --regexOptions "IgnoreCase, Singleline" --groupnumber 1 sMinute=value
+if --left "${sHour}" --operator "Is_Null_Or_Empty" --negate 
+	convertStringToNumber --culture "en-US" --text "${sHour}" iHour=value
+endIf
+getRegex --text "${sAllowedIntervalForCalls_EndHour}" --regexPattern "\\:(\\d{2})" --regexOptions "IgnoreCase, Singleline" --groupnumber 1 sMinute=value
+if --left "${sMinute}" --operator "Is_Null_Or_Empty" --negate 
+	convertStringToNumber --culture "en-US" --text "${sMinute}" iMinute=value
+endIf
+if --left "${dCurrentDateTime.Hour}" --operator "Equal_To" --right "${iHour}"
+	if --left "${dCurrentDateTime.Minute}" --operator "Greater_Than_Equal_To" --right "${iMinute}"
+		setVar --name "${sSendServiceStatus}" --value true
+		//executeScript --name "${in_sPathToFrame}\\IBM Code\\NeededSnippets\\SetServiceStatus.wal" --parameters "in_sSendServiceStatus=${sSendServiceStatus}" --comment "SetServiceStatus.wal"
+		logMessage --message "-- Starting Service at :${dCurrentDateTime}" --type "Info"
+	endIf
+elseIf --left "${dCurrentDateTime.Hour}" --operator "Greater_Than" --right "${iHour}" --comment "${dCurrentDateTime.Hour}>${iHour}"
+	setVar --name "${sSendServiceStatus}" --value true
+	//executeScript --name "${in_sPathToFrame}\\IBM Code\\NeededSnippets\\SetServiceStatus.wal" --parameters "in_sSendServiceStatus=${sSendServiceStatus}" --comment "SetServiceStatus.wal"
+	logMessage --message "-- Starting Service at :${dCurrentDateTime}" --type "Info"
+endIf
+endSub*23.0.0.0

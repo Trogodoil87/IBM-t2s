@@ -1,0 +1,36 @@
+—defVar --name in_sQueuePath --type String --parameter 
+defVar --name in_sUpdatedID --type String --parameter 
+defVar --name in_FilteredDT --type DataTable --parameter 
+defVar --name fQueueFile --type Excel
+defVar --name dtQueueTable --type DataTable
+defVar --name iQRowsCounter --type Numeric
+defVar --name iQColumnCounter --type Numeric
+defVar --name idx --type Numeric
+defVar --name sQID --type String
+defVar --name idxColumn --type Numeric
+defVar --name sCellValue --type String
+defVar --name sColumnName --type String
+//#Module that is used to update only one row in selected Excel File
+//#It is used at the end of main file after Set transaction status module
+
+logMessage --message "--- UpdateRowFromOneTableToAnother Starting---" --type "Info"
+excelOpen --file "${in_sQueuePath}" fQueueFile=value
+excelGetTable --file ${fQueueFile} --getfirstsheet  --entiretable  --hasheaders  dtQueueTable=value iQRowsCounter=rows iQColumnCounter=columns
+for --variable ${idx} --from 1 --to ${iQRowsCounter} --step 1
+	getTableCell --dataTable ${dtQueueTable} --column 1 --row ${idx} sQID=value
+	if --left "${sQID}" --operator "Equal_To" --right "${in_sUpdatedID}"
+		//logMessage --message "\r\nsQID:\r\n${sQID}" --type "Info"
+		setVar --name "${idxColumn}" --value 1
+		repeat
+			getTableCell --dataTable ${in_FilteredDT} --column ${idxColumn} --row 1 sCellValue=value
+			//logMessage --message "${sCellValue}" --type "Info"
+			getColumnName --dataTable ${dtQueueTable} --index ${idxColumn} sColumnName=value
+			updateRow --index ${idx} --valuesmapping "${sColumnName}=${sCellValue}" --dataTable ${dtQueueTable}
+			incrementVar --number ${idxColumn}
+		until --left "${idxColumn}" --operator "Less_Than_Equal_To" --right "${iQColumnCounter}"
+		excelSetTable --dataTable ${dtQueueTable} --headers  --file ${fQueueFile} --getfirstsheet  --row 1 --column 1
+		//logMessage --message "\r\n${dtQueueTable}" --type "Info"
+	endIf
+next
+excelClose --file ${fQueueFile} --save 
+logMessage --message "---UpdateRowFromOneTableToAnother Ending---" --type "Info"*	20.12.3.0

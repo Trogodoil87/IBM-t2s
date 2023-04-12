@@ -1,0 +1,19 @@
+ø	defVar --name dictionary --type StringDictionary --innertype String
+defVar --name sToken --type String
+defVar --name bSuccess --type Boolean
+defVar --name sResponse --type String
+defVar --name sStatusCode --type Numeric
+defVar --name sReason --type String
+defVar --name out_sServiceStatus --type String --output 
+executeScript --name "D:\\RPA ServiceCentrix\\SCX_SendVoice_Message\\IBM Code\\NeededSnippets\\GetAccessToken.wal" --output "out_sToken=${sToken}" --comment "GetAccessToken.wal"
+clear --collection "${dictionary}"
+strDictAdd --key Authorization --value "Bearer ${sToken}" --dictionary ${dictionary}
+strDictAdd --key Accept --value "application/json" --dictionary ${dictionary}
+httpRequest --verb "Get" --url "https://pbxe.psp-bg.com:8082/service" --headers ${dictionary} bSuccess=success sResponse=value sStatusCode=statusCode sReason=reasonPhrase
+logMessage --message "Calls: ${sResponse}" --type "Info"
+if --left "${sResponse}" --operator "Contains" --right "{\"is_running\":"
+	getRegex --text "${sResponse}" --regexPattern "\\{\\\"is_running\\\"\\:(.*)\\}" --regexOptions "IgnoreCase, Multiline" --groupnumber 1 out_sServiceStatus=value
+else
+	failTest --message "-- Service Status cannot be returned --"
+endIf
+//#Calls: {"is_running":true}*21.0.5.0

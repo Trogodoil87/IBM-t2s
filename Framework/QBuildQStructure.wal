@@ -1,0 +1,70 @@
+‹#defVar --name in_ConfigPath --type String --parameter 
+defVar --name bConfigPathExsist --type Boolean
+defVar --name openExcel --type Excel
+defVar --name in_SheetName --type String --parameter 
+defVar --name GetExcelTable --type DataTable
+defVar --name GetExcelTableRows --type Numeric
+defVar --name GetExcelTableColumns --type Numeric
+defVar --name sLocation --type String
+defVar --name sQueueName --type String
+defVar --name bAutoRetry --type String
+defVar --name iMaxNumberOfRetries --type String
+defVar --name iRetryFailedFirst --type String
+defVar --name sRestrictedFields --type String
+defVar --name out_QBuildQStructure --type DataTable --output 
+defVar --name index --type Numeric
+defVar --name sFiledName --type String
+defVar --name sFiledType --type String
+defVar --name bColumnExsist --type Boolean
+defVar --name iRowsConter --type String
+//#
+//#in_ConfigPath; in_SheetName;
+//#
+//#out_QBuildQStructure
+logMessage --message "-- QBuildQStructure: Starting --" --type "Info"
+ifFile --file "${in_ConfigPath}" bConfigPathExsist=value
+if --left "${bConfigPathExsist}" --operator "Equal_To" --right true
+	excelOpen --file "${in_ConfigPath}" openExcel=value
+	excelGetTable --file ${openExcel} --sheet "${in_SheetName}" --entiretable  --hasheaders  GetExcelTable=value GetExcelTableRows=rows GetExcelTableColumns=columns
+	ifFile --file "${in_ConfigPath}" bConfigPathExsist=value
+	excelGet --file ${openExcel} --sheet QueueDefinition --row 2 --column 2 sLocation=value
+	excelGet --file ${openExcel} --sheet QueueDefinition --row 3 --column 2 sQueueName=value
+	excelGet --file ${openExcel} --sheet QueueDefinition --row 4 --column 2 bAutoRetry=value
+	excelGet --file ${openExcel} --sheet QueueDefinition --row 5 --column 2 iMaxNumberOfRetries=value
+	excelGet --file ${openExcel} --sheet QueueDefinition --row 6 --column 2 iRetryFailedFirst=value
+	excelGet --file ${openExcel} --sheet QueueDefinition --row 7 --column 2 sRestrictedFields=value
+	//logMessage --message "Variables stored correctly:\r\n${sLocation}\r\n${sQueueName}\r\n${bAutoRetry}\r\n${iMaxNumberOfRetries}\r\n${iRetryFailedFirst}\r\n${sRestrictedFields}\r\n" --type "Info"
+	//logMessage --message "${GetExcelTableRows}" --type "Info"
+	addColumn --dataTable ${out_QBuildQStructure} --columnname TransactionID --type Numeric
+	addColumn --dataTable ${out_QBuildQStructure} --columnname CreatedDate --type String
+	addColumn --dataTable ${out_QBuildQStructure} --columnname Status --type String
+	addColumn --dataTable ${out_QBuildQStructure} --columnname FailureType --type String
+	addColumn --dataTable ${out_QBuildQStructure} --columnname Result --type String
+	addColumn --dataTable ${out_QBuildQStructure} --columnname History --type String
+	addColumn --dataTable ${out_QBuildQStructure} --columnname Retries --type Numeric
+	for --variable ${index} --from 10 --to ${GetExcelTableRows} --step 1
+		excelGet --file ${openExcel} --sheet QueueDefinition --row ${index} --column 1 sFiledName=value
+		excelGet --file ${openExcel} --sheet QueueDefinition --row ${index} --column 2 sFiledType=value
+		if --left "${sFiledName}" --operator "Is_Null_Or_Empty" --negate 
+			if --left "${sFiledType}" --operator "Is_Null_Or_Empty" --negate 
+				if --left "${out_QBuildQStructure}" --operator "Is_Null" --negate 
+					tableColumnExists --dataTable ${out_QBuildQStructure} --name "${sFiledName}" bColumnExsist=value
+					if --left "${bColumnExsist}" --operator "Equal_To" --right false
+						addColumn --dataTable ${out_QBuildQStructure} --columnname "${sFiledName}" --type "${sFiledType}"
+						setVarIf --variablename "${iRowsConter}" --value "${out_QBuildQStructure.Rows}" --left "${out_QBuildQStructure.Rows}" --operator "Greater_Than" --right "-1"
+					endIf
+				endIf
+			endIf
+		endIf
+	next
+endIf
+//logMessage --message "Number of Rows in table out_tQ asseblied :${out_QBuildQStructure.Rows} ${out_QBuildQStructure}" --type "Info"
+logMessage --message "-- QBuildQStructure: Closing --" --type "Info"
+//#Commented lines are needed for testing module QBuildQStructure
+//addRow --dataTable ${out_tQ}
+//excelOpen --file "C:\\IBM Projects\\Output.xlsx" bopenOutput=success openOutput=value
+//if --left "${bopenOutput}" --operator "Equal_To" --right true
+//logMessage --message "${bopenOutput}" --type "Info"
+//excelSetTable --dataTable ${out_tQ} --headers  --file ${openOutput} --sheet 2 --row 1 --column 1 bDTToExcel=value
+//excelClose --file ${openOutput} --save 
+//endIf*	20.12.3.0

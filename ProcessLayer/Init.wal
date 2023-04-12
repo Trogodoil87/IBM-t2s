@@ -1,0 +1,43 @@
+ÏdefVar --name Config --type StringDictionary --innertype String --output 
+defVar --name initAllSettingsList --type List --innertype String --value "[Settings,Constants,QueueDefinition]"
+defVar --name ConfigPath --type String
+defVar --name out_QueuePath --type String --output 
+defVar --name dMainDate --type DateTime
+defVar --name in_sPathToFrame --type String --parameter 
+defVar --name sMainDate --type String
+defVar --name SCX_Template --type String
+defVar --name openExcel --type Excel
+defVar --name out_GetExcelTable --type DataTable --output 
+defVar --name NowDateTime --type DateTime
+defVar --name bQueueFileExists --type Boolean
+defVar --name out_sQueueName --type String --output 
+logMessage --message "--- Starting INIT MODULE ---" --type "Info"
+//# There are a constant variables ConfigPath and SCX_Template here.You shoud customize them when starting Framework for the first time or when you change directory of config file. Change version of Framework too.
+setVar --name "${ConfigPath}" --value "D:\\RPA ServiceCentrix\\IBM_RPA_Text_To_Speech\\IBM RobotData\\Config.xlsx" --comment "!CONSTANT: Here you shoud write correct path to Config file"
+trimString --text "${ConfigPath}" --trimoption "TrimStartAndEnd" ConfigPath=value
+setVar --name "${SCX_Template}" --value SCX_01 --comment "!CONSTANT: Here you shoud write correct version of SCX_Template"
+
+//# in_sPathToFrame
+//# out_QueuePath
+
+if --left "${Config}" --operator "Is_Null_Or_Empty"
+	logMessage --message "\r\n-------------------------------------------------------------------------------\r\n" --type "Info"
+	getCurrentDateAndTime --localorutc "LocalTime" dMainDate=value
+	dateTimeToText --date "${dMainDate}" --usecustomformat  --customformat "yyyy-MM-dd HH:mm:ss" sMainDate=value
+	executeScript --name "${in_sPathToFrame}IBM Code\\Framework\\CloseAllApplications.wal" --comment CloseAllApps
+	executeScript --name "${in_sPathToFrame}IBM Code\\Framework\\InitAllSettings.wal" --parameters "in_InitAllSettingsList=${initAllSettingsList},in_SCXVersion=${SCX_Template},in_ConfigPath=${ConfigPath}" --output "out_Config=${Config}" --comment InitAllSettings
+	strDictGet --key QueueName --dictionary ${Config} out_sQueueName=value
+	setVar --name "${out_QueuePath}" --value "${in_sPathToFrame}IBM RobotData\\${out_sQueueName}.xlsx"
+	
+	
+	
+	ifFile --file "${out_QueuePath}" bQueueFileExists=value
+	if --left "${bQueueFileExists}" --operator "Is_True"
+		excelOpen --file "${out_QueuePath}" openExcel=value
+		excelGetTable --file ${openExcel} --getfirstsheet  --entiretable  --hasheaders  out_GetExcelTable=value
+		excelClose --file ${openExcel} --save 
+	else
+		stopExecution --current 
+	endIf
+endIf
+logMessage --message "--- Closing INIT MODULE ---" --type "Info"*21.0.5.0

@@ -1,0 +1,53 @@
+�.defVar --name in_sPathToReports --type String --parameter 
+defVar --name in_sPathToLetters --type String --parameter 
+defVar --name in_sPhone --type String --parameter 
+defVar --name sCustomerData --type String
+defVar --name AttachmentsList --type List --innertype String
+defVar --name newMailConn --type EmailConnection
+defVar --name username --type String
+defVar --name password --type SecureString
+defVar --name sMailList --type List --innertype String
+defVar --name in_CustomerMail --type String --parameter 
+defVar --name in_Config --type StringDictionary --innertype String --parameter 
+defVar --name sEkontMailSubject --type String
+defVar --name sEkontMailCredentials --type String
+defVar --name in_bEmptySheetsCounter --type Boolean --parameter 
+defVar --name sAOMail --type String
+defVar --name AOMailList --type List --innertype String
+defVar --name in_sID --type String --parameter 
+defVar --name in_bNotCustomerMail --type Boolean --parameter 
+defVar --name sSendFinalMail --type String
+logMessage --message "--- SendFinalMail Starting ---" --type "Info"
+strDictGet --key EkontMailSubject --dictionary ${in_Config} --comment "Get the Email Subject from Config" sEkontMailSubject=value
+strDictGet --key EkontMailSubject --dictionary ${in_Config} --comment "Get the Email Subject from Config" sEkontMailSubject=value
+strDictGet --key SendFinalMail --dictionary ${in_Config} --comment "Get the Email receivers from Config" sSendFinalMail=value
+splitString --text "${sSendFinalMail}" --delimiteroption "CustomDelimiter" --customdelimiter "," --count 20 sMailList=value
+splitString --text "${sSendFinalMail}" --delimiteroption "CustomDelimiter" --customdelimiter "," --count 20 AOMailList=value
+add --collection "${sMailList}" --value "${in_CustomerMail}" --comment "Add customer Emails to collection of type List"
+setVar --name "${sCustomerData}" --value "${in_sPhone}"
+add --collection "${AttachmentsList}" --value "${in_sPathToLetters}" --comment "Add letters to be send to customer to collection of type List"
+if --left "${in_bEmptySheetsCounter}" --operator "Is_True" --negate 
+	add --collection "${AttachmentsList}" --value "${in_sPathToReports}" --comment "Add reports to be send to customer to collection of type List"
+	strDictGet --key EkontMailCredentials --dictionary ${in_Config} --comment "Get credentials for Ekont mail from Config" sEkontMailCredentials=value
+	getVaultItem --name "${sEkontMailCredentials}" --system  username=userName password=password
+	logMessage --message "Send Final E-mail:\r\nAttachments:${AttachmentsList}\r\n${AttachmentsList.Count}" --type "Info"
+	outlookConnect --mailusername "${username}" --mailpassword "${password}" newMailConn=value
+	if --left "${in_bNotCustomerMail}" --operator "Is_True"
+		emailSend --connection ${newMailConn} --to ${sMailList} --from "${username}" --subject "АО-${in_sID} ${sEkontMailSubject}" --bodytype "Text" --body "Здравейте, \r\n\r\nСправка АО-${in_sID} е изработена, но не е посочен имейл на заявител. \r\nНеобходимо е информацията да бъде записана на компакт диск и предоставена на клиента, заедно с разпечатаното уведомително писмо.\r\n\r\nПоздрави,\r\nRPA  \r\n" --attachments ${AttachmentsList} --comment "Connect to Outlook and send Final Mail To Reporter or AO"
+	else
+		emailSend --connection ${newMailConn} --to ${sMailList} --from "${username}" --subject "АО-${in_sID} ${sEkontMailSubject}" --bodytype "Text" --body "Здравейте,\r\n\r\nПриложено изпращаме\r\nзаявената от Вас справка за куриерски\r\nи пощенски услуги.\r\n\r\nИнформираме Ви, че при заявена справка по повече от един\r\nтелефонен номер, тя ще Ви бъде\r\nпредоставена в отделна таблица за\r\nвсеки номер по избрания от Вас канал за\r\nкомуникация.\r\n\r\nОставаме на\r\nразположение за допълнителна\r\nинформация на национален телефонен\r\nномер 07001 7300. \r\n\r\nБлагодарим Ви за доверието." --attachments ${AttachmentsList} --comment "Connect to Outlook and send Final Mail To Customer"
+	endIf
+	emailDisconnect --connection ${newMailConn}
+else
+	strDictGet --key EmailPDL1 --dictionary ${in_Config} --comment "Get AO Mail" sAOMail=value
+	strDictGet --key EkontMailCredentials --dictionary ${in_Config} --comment "Get credentials for Ekont mail from Config" sEkontMailCredentials=value
+	add --collection "${AOMailList}" --value "${sAOMail}"
+	getVaultItem --name "${sEkontMailCredentials}" --system  username=userName password=password
+	logMessage --message "Send Final E-mail:\r\nAttachments:${AttachmentsList}\r\n${AttachmentsList.Count}" --type "Info"
+	outlookConnect --mailusername "${username}" --mailpassword "${password}" newMailConn=value
+	emailSend --connection ${newMailConn} --to ${AOMailList} --from "${username}" --subject "АО-${in_sID}  ${sEkontMailSubject}" --bodytype "Text" --body "Здравейте,\n\nПо заявка с номер AO - ${in_sID} няма открита информация от робота.\nМоля, за проверка на верността на справката и изпращането й към E-mail:${in_CustomerMail}\n\nПоздрави,\nRPA  " --attachments ${AttachmentsList} --comment "Connect to Outlook and send Error Mail"
+	emailDisconnect --connection ${newMailConn}
+endIf
+clear --collection "${AttachmentsList}" --comment "Clear AttachmentsList collection"
+clear --collection "${sMailList}" --comment "Clear customer emails collection"
+logMessage --message "--- SendFinalMail Ending ---" --type "Info"*21.0.5.0

@@ -1,0 +1,109 @@
+¿8defVar --name in_Config --type StringDictionary --innertype String --parameter 
+defVar --name in_QueuePath --type String --parameter 
+defVar --name in_sUpdatedID --type String --parameter 
+defVar --name iUpdatedID --type Numeric
+defVar --name dEndTime --type DateTime
+defVar --name sHistory --type String
+defVar --name in_bSuccessRun --type Boolean --parameter 
+defVar --name sLastHistory --type String
+defVar --name in_BusinessExceptionMsg --type String --parameter 
+defVar --name iRetry --type Numeric
+defVar --name sEndTime --type String
+defVar --name NewScreenShot --type Image
+defVar --name NewImagePath --type String
+defVar --name in_sPathToFrame --type String --parameter 
+defVar --name sLastRetry --type String
+defVar --name in_Error --type Error --parameter 
+defVar --name in_FilteredDT --type DataTable --parameter  --output 
+defVar --name sStatus --type String
+defVar --name sEmailsUponFailure --type String
+defVar --name EmailsUponFailureList --type List --innertype String
+defVar --name MailCredentials --type String
+defVar --name username --type String
+defVar --name password --type SecureString
+defVar --name newMailConn --type EmailConnection
+defVar --name sErrorSubject --type String
+defVar --name iColumnHistory --type Numeric
+defVar --name iColumnRetry --type Numeric
+defVar --name iColumnStatus --type Numeric
+//#
+//# in_bInitSuccessRun , in_bProcessSucessRun , in_bQGetTransactionSuccessRun , in_BusinessExceptionMsg , in_ErrorRoutineName , in_QueuePath ; in_sPathToFrame ; in_UpdateRowNumber ; in_Config; in_ErrorLineNumber
+
+logMessage --message "-- SetTransactionStatus: Starting for TransactionID : ${in_sUpdatedID} --" --type "Info"
+//logMessage --message "\r\n${in_FilteredDT}" --type "Info"
+//logMessage --message "in_bSuccessRun: ${in_bSuccessRun}" --type "Info"
+//#Success Path or BusinessException
+case --name "Success Path" --switches "CaseSwitchesAll" --comment "When No System Errors ; Config is Readed; BusinessMsg"
+	when --left "${in_bSuccessRun}" --operator "Equal_To" --right true
+	when --left "${in_Config}" --operator "Is_Null_Or_Empty" --negate 
+then
+	if --left "${in_sUpdatedID}" --operator "Is_Null_Or_Empty" --negate 
+		if --left "${in_FilteredDT}" --operator "Is_Null" --negate 
+			convertStringToNumber --text "${in_sUpdatedID}" iUpdatedID=value
+			getCurrentDateAndTime --localorutc "LocalTime" dEndTime=value
+			dateTimeToText --date "${dEndTime}" --usecustomformat  --customformat "yyyy-MM-dd HH:mm:ss" sEndTime=value
+			findColumnByName --dataTable ${in_FilteredDT} --name History iColumnHistory=value
+			getTableCell --dataTable ${in_FilteredDT} --column ${iColumnHistory} --row 1 sLastHistory=value
+			findColumnByName --dataTable ${in_FilteredDT} --name Retries iColumnRetry=value
+			getTableCell --dataTable ${in_FilteredDT} --column ${iColumnRetry} --row 1 sLastRetry=value
+			findColumnByName --dataTable ${in_FilteredDT} --name Status iColumnStatus=value
+			getTableCell --dataTable ${in_FilteredDT} --column ${iColumnStatus} --row 1 sStatus=value
+			if --left "${sLastRetry}" --operator "Is_Null_Or_Empty"
+				setVar --name "${sLastRetry}" --value 0
+			endIf
+			
+			if --left "${in_BusinessExceptionMsg}" --operator "Is_Null_Or_Empty"
+				//#Sucess Update
+				setVar --name "${sLastHistory}" --value "${sLastHistory}\r\n${dEndTime} ---- Record Processed ----"
+				updateRow --index 1 --valuesmapping "Status=Success2,Retries=${sLastRetry},Result=Record Processed,History=${sLastHistory},EndTime=${sEndTime},FailureType= " --dataTable ${in_FilteredDT}
+			else
+				//# Business Exception
+				setVar --name "${sHistory}" --value "${dEndTime} ----\r\nBusinessException:\r\n${in_BusinessExceptionMsg} \r\n"
+				setVar --name "${sHistory}" --value "${sLastHistory} --- ${sHistory}\r\n"
+				updateRow --index 1 --valuesmapping "Status=Failed,EndTime=${sEndTime},Retries=${sLastRetry},Result=BusinessException,History=${sHistory},FailureType=BE" --dataTable ${in_FilteredDT}
+			endIf
+			setVar --name "${sLastHistory}"
+		endIf
+	endIf
+endCase
+
+//# System Error
+case --name "Success Path" --switches "AtLeast" --minimum 1 --comment "System Error"
+	when --left "${in_bSuccessRun}" --operator "Equal_To" --right false
+	when --left "${sStatus}" --operator "Equal_To" --right Failed
+then
+	if --left "${in_Config}" --operator "Is_Null_Or_Empty" --negate 
+		if --left "${in_sUpdatedID}" --operator "Is_Null_Or_Empty" --negate 
+			if --left "${in_FilteredDT}" --operator "Is_Null" --negate 
+				convertStringToNumber --text "${in_sUpdatedID}" iUpdatedID=value
+				getCurrentDateAndTime --localorutc "LocalTime" dEndTime=value
+				dateTimeToText --date "${dEndTime}" --usecustomformat  --customformat "yyyy-MM-dd HH:mm:ss" sEndTime=value
+				findColumnByName --dataTable ${in_FilteredDT} --name History iColumnHistory=value
+				getTableCell --dataTable ${in_FilteredDT} --column ${iColumnHistory} --row 1 sLastHistory=value
+				findColumnByName --dataTable ${in_FilteredDT} --name Retries iColumnRetry=value
+				getTableCell --dataTable ${in_FilteredDT} --column ${iColumnRetry} --row 1 sLastRetry=value
+				setVar --name "${sHistory}" --value "${dEndTime} ----\r\n${in_Error}\r\n"
+				setVar --name "${sHistory}" --value "${sLastHistory} --- ${sHistory}\r\n"
+				if --left "${sLastRetry}" --operator "Is_Null_Or_Empty"
+					setVar --name "${sLastRetry}" --value 0
+				endIf
+				convertStringToNumber --text "${sLastRetry}" iRetry=value
+				incrementVar --number ${iRetry}
+				printScreen NewScreenShot=value
+				saveImage --image ${NewScreenShot} --directory "${in_sPathToFrame}IBM RobotData\\Exceptions_Screenshots" --createrandomfile  --format "Png" NewImagePath=value
+				updateRow --index 1 --valuesmapping "Status=Failed,EndTime=${sEndTime},Retries=${iRetry},Result=System Exception,History=${sHistory},FailureType=SE" --dataTable ${in_FilteredDT}
+				logMessage --message "--- SendSystemErrorMail Starting ---" --type "Info"
+				strDictGet --key EmailsUponFailure --dictionary ${in_Config} --comment "Get the Emails to sent Error mail to from Config" sEmailsUponFailure=value
+				strDictGet --key MailSubjectUponFailure --dictionary ${in_Config} --comment "Get the Mail subject upon System Error from Config" sErrorSubject=value
+				splitString --text "${sEmailsUponFailure}" --delimiteroption "CustomDelimiter" --customdelimiter "," --count 10 EmailsUponFailureList=value
+				strDictGet --key EmailCredentials --dictionary ${in_Config} --comment "Get credentials for Ekont mail from Config" MailCredentials=value
+				getVaultItem --name "${MailCredentials}" --system  username=userName password=password
+				outlookConnect --mailusername "${username}" --mailpassword "${password}" newMailConn=value
+				emailSend --connection ${newMailConn} --to ${EmailsUponFailureList} --from "${username}" --subject "${sErrorSubject}" --bodytype "Text" --body "${in_Error}" --comment "Connect to Outlook and send Mail if System Error occurs"
+				emailDisconnect --connection ${newMailConn}
+				setVar --name "${sLastHistory}"
+			endIf
+		endIf
+	endIf
+endCase
+logMessage --message "-- SetTransactionStatus: Ending for TransactionID : ${in_sUpdatedID} RetryNumber: ${iRetry}  --" --type "Info"*21.0.5.0

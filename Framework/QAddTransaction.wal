@@ -1,0 +1,81 @@
+�.defVar --name in_Config --type StringDictionary --innertype String --parameter 
+defVar --name iTransactionIndex --type Numeric
+defVar --name in_QueuePath --type String --parameter 
+defVar --name bQueueExsist --type Boolean
+defVar --name QueueFile --type Excel
+defVar --name GetQueueFile --type DataTable
+defVar --name GetQueueTableRowsQAddTransaction --type Numeric
+defVar --name GetQueueTableColumnsQAddTransaction --type Numeric
+defVar --name iWriteStartRow --type Numeric
+defVar --name bUniqueValue --type Boolean --value False --output 
+defVar --name in_CreatedExcelFilePath --type String --parameter 
+defVar --name sLocation --type String
+defVar --name sQueueName --type String
+defVar --name in_tQ --type DataTable --parameter 
+defVar --name in_ConfigPath --type String --parameter 
+defVar --name out_QBuildQStructure --type DataTable --output 
+defVar --name FullExcelFilePath --type String
+defVar --name dCreatedDate --type DateTime
+defVar --name in_sMainDate --type String --parameter 
+defVar --name in_UniqueFieldPhone --type String --parameter 
+defVar --name iUniqueFieldRows --type Numeric
+defVar --name in_sPathToFrame --type String --parameter 
+defVar --name sCreatedDate --type String
+defVar --name ErrorQAddTransaction --type Error
+defVar --name bCreateExcelFile --type Boolean
+defVar --name in_UniqueFieldName --type String --parameter 
+defVar --name in_UniqueFieldEGN --type String --parameter 
+defVar --name in_UniqueFieldID --type String --parameter 
+//#Add new transaction in QueueFile if in_UniqueField is not stored yet in QueueFile
+//#
+//# in_Config ,  in_ConfigPath , in_CreatedExcelFilePath, in_QueuePath , in_sMainDate , in_sPathToFrame , in_UniqueFieldPhone, in_UniqueFieldName, in_UniqueFieldEGN , in_tQ
+//#
+//# out_QBuildQStructure
+logMessage --message "-- QAddTransaction: Starting --" --type "Info"
+getCurrentDateAndTime --localorutc "LocalTime" dCreatedDate=value
+dateTimeToText --date "${dCreatedDate}" --usecustomformat  --customformat "yyyy-MM-dd HH:mm:ss" sCreatedDate=value
+if --left "${in_Config}" --operator "Is_Null_Or_Empty" --negate 
+	if --left "${in_tQ}" --operator "Is_Null" --negate 
+		ifFile --file "${in_QueuePath}" bQueueExsist=value
+		if --left "${bQueueExsist}" --operator "Equal_To" --right true
+			excelOpen --file "${in_QueuePath}" QueueFile=value
+			excelGetTable --file ${QueueFile} --sheet Sheet1 --entiretable  --hasheaders  GetQueueFile=value GetQueueTableRowsQAddTransaction=rows GetQueueTableColumnsQAddTransaction=columns
+			
+			filterTable --where "[ID]=\'${in_UniqueFieldID}\'" --dataTable ${GetQueueFile} --comment "Filter table by Unique Field\\s" iUniqueFieldRows=rows
+			if --left "${iUniqueFieldRows}" --operator "Less_Than_Equal_To" --right 0
+				setVar --name "${iWriteStartRow}" --value "${GetQueueTableRowsQAddTransaction}"
+				incrementVar --number ${iWriteStartRow}
+				setVar --name "${iTransactionIndex}" --value "${iWriteStartRow}"
+				//setVar --name "${SheetList}" --value "[Изпратени преводи,Получени преводи,Изпратени пратки,Получени пратки,Получени наложени платежи,Заплатени наложени платежи]"
+				updateRow --index 1 --valuesmapping "TransactionID=${iTransactionIndex},CreatedDate=${sCreatedDate},Status=New,StartTime=${sCreatedDate},MainRunTime=${in_sMainDate}" --dataTable ${in_tQ}
+				logMessage --message "Adding in exsisting queue in_tQ:\r\n${in_tQ}" --type "Info"
+				incrementVar --number ${iWriteStartRow}
+				executeScript --isfromfile  --filename "${in_sPathToFrame}IBM Code\\Framework\\WriteToExcelFile.wal" --parameters "in_CreatedExcelFilePath=${in_QueuePath},in_InsertExcelDT=${in_tQ},in_ExcelSheetName=Sheet1,in_ExcelStartRow=${iWriteStartRow},in_ExcelStartColumn=1,in_WriteHeaders=false" --comment WriteToExcelFile
+			else
+				setVar --name "${bUniqueValue}" --value true
+			endIf
+			
+			//# if file do not exsist then create and add TR
+			//
+		else
+			executeScript --isfromfile  --filename "${in_sPathToFrame}IBM Code\\Framework\\QBuildQStructure.wal" --parameters "in_ConfigPath=${in_ConfigPath},in_SheetName=QueueDefinition" --output "out_QBuildQStructure=${out_QBuildQStructure}" --comment QBuildQStructure
+			updateRow --index ${in_tQ.Rows} --valuesmapping "TransactionID=1,CreatedDate=${sCreatedDate},Status=New,MainRunTime=${in_sMainDate},StartTime=${sCreatedDate}" --dataTable ${in_tQ}
+			strDictGet --key Location --dictionary ${in_Config} sLocation=value
+			strDictGet --key QueueName --dictionary ${in_Config} sQueueName=value
+			concatTexts --text "${sLocation}" --value "${sQueueName}" FullExcelFilePath=value
+			setVars --assignments "${iWriteStartRow}=1"
+			logMessage --message "Adding in now created queue in_tQ:  ${in_tQ}" --type "Info"
+			executeScript --isfromfile  --filename "${in_sPathToFrame}IBM Code\\Framework\\CreateExcelFile.wal" --parameters "in_CreatedExcelFileName=${sQueueName},in_CreatedExcelFilePath=${sLocation}" --comment CreateExcelFile
+			executeScript --isfromfile  --filename "${in_sPathToFrame}IBM Code\\Framework\\WriteToExcelFile.wal" --parameters "in_CreatedExcelFilePath=${in_QueuePath},in_InsertExcelDT=${in_tQ},in_ExcelSheetName=Sheet1,in_ExcelStartRow=1,in_ExcelStartColumn=1,in_WriteHeaders=true" --comment WriteToExcelFile
+			logMessage --message "AddTransaction: New Queue created: ${in_CreatedExcelFilePath}${sQueueName}.xlsx and first transaction added with number : 1" --type "Info"
+			incrementVar --number ${iWriteStartRow}
+		endIf
+	endIf
+endIf
+if --left "${bUniqueValue}" --operator "Equal_To" --right false
+	decrementVar --number ${iWriteStartRow}
+	logMessage --message "-- AddTransaction result: Added TransactionID : ${iWriteStartRow}--" --type "Info"
+else
+	logMessage --message "Exsisting value: ${in_UniqueFieldID} in Queue" --type "Info"
+endIf
+logMessage --message "-- AddTransaction: Closing --" --type "Info"*21.0.0.0

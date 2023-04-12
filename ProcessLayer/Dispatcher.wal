@@ -1,0 +1,39 @@
+†defVar --name in_Config --type StringDictionary --innertype String --parameter 
+defVar --name out_QBuildQStructure --type DataTable --output 
+defVar --name in_QueuePath --type String --parameter 
+defVar --name in_ConfigPath --type String --parameter 
+defVar --name in_SheetName --type String --parameter 
+defVar --name in_WriteHeaders --type Boolean --parameter 
+defVar --name in_CreatedExcelFile --type String --parameter 
+defVar --name iRowsAdded --type Numeric
+defVar --name in_sMainDate --type String --parameter 
+defVar --name sID --type String
+defVar --name in_sPathToFrame --type String --parameter 
+defVar --name bUniqueValue --type Boolean
+defVar --name out_ChromeStartedBrowser --type Browser --output 
+defVar --name out_ChromeStartedBrowserName --type String --output 
+//#
+//# in_Config , in_ConfigPath , in_CreatedExcelFile , in_QueuePath , in_SheetName ,  in_sMainDate , in_sPathToFrame , in_WriteHeaders
+//#
+//# out_QBuildQStructure
+//#/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+logMessage --message "-- Dispatcher: Starting --" --type "Info"
+//setVar --name "${out_ChromeStartedBrowserName}" --value ChromeBrowser
+//webStart --name "${out_ChromeStartedBrowserName}" --type "Chrome" --loaduserprofile  --pageloadtimeout "00:00:02" out_ChromeStartedBrowser=value
+//delay --timeout "00:00:03"
+//webNavigate --url "https://www.google.com/"
+
+if --left "${in_Config}" --operator "Is_Null_Or_Empty" --negate 
+	goSub --label AddToQueueCorrectData
+endIf
+logMessage --message "-- Dispatcher.xaml:  Success, rows added to the queue: ${iRowsAdded} --" --type "Info"
+beginSub --name AddToQueueCorrectData
+executeScript --name "${in_sPathToFrame}IBM Code\\Framework\\QBuildQStructure.wal" --parameters "in_ConfigPath=${in_ConfigPath},in_SheetName=QueueDefinition" --output "out_QBuildQStructure=${out_QBuildQStructure}" --comment QBuildQStructure
+addRow --dataTable ${out_QBuildQStructure}
+
+setVar --name "${sID}" --value 2
+updateRow --index 1 --valuesmapping "ID=${sID}" --dataTable ${out_QBuildQStructure}
+executeScript --name "${in_sPathToFrame}IBM Code\\Framework\\QAddTransaction.wal" --parameters "in_QueuePath=${in_QueuePath},in_ConfigPath=${in_ConfigPath},in_SheetName=${in_SheetName},in_Config=${in_Config},in_tQ=${out_QBuildQStructure},in_QBuildQStructure=${out_QBuildQStructure},in_WriteHeaders=${in_WriteHeaders},in_CreatedExcelFilePath=${in_CreatedExcelFile},in_sMainDate=${in_sMainDate},in_sPathToFrame=${in_sPathToFrame},in_UniqueFieldID=${sID}" --output "bUniqueValue=${bUniqueValue},," --comment QAddTransaction
+incrementVar --number ${iRowsAdded}
+
+endSub*21.0.5.0

@@ -1,0 +1,21 @@
+çdefVar --name CreatedExcelFileApp --type OfficeApplication
+defVar --name in_CreatedExcelFilePath --type String --parameter 
+defVar --name in_CreatedExcelFileName --type String --parameter 
+defVar --name out_sCreatedFilePath --type String
+//# in variables:
+//#in_CreateExcelFilePath; in_CreateExcelFileName;
+
+//#out variables:
+//#out_sCreatedFilePath
+
+logMessage --message "-- CreateExcelFile: Starting --" --type "Info"
+logMessage --message "Saving 5 sec delay ..." --type "Info"
+officeCreate --type "Excel" CreatedExcelFileApp=officeapplication
+logMessage --message "${in_CreatedExcelFileName}\r\n${in_CreatedExcelFilePath}" --type "Info"
+delay --timeout "00:00:05"
+officeSaveAs --filepath "${in_CreatedExcelFilePath}" --filename "${in_CreatedExcelFileName}" --fileformat "Default" --officeapplication ${CreatedExcelFileApp} out_sCreatedFilePath=value
+delay --timeout "00:00:05"
+officeClose --officeapplication ${CreatedExcelFileApp}
+delay --timeout "00:00:05"
+logMessage --message "File Created at: ${out_sCreatedFilePath}" --type "Info"
+logMessage --message "-- CreateExcelFile: Closing --" --type "Info"*	20.12.5.0

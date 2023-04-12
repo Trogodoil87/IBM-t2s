@@ -1,0 +1,230 @@
+µ~defVar --name out_BusinessExceptionMsg --type String --output 
+defVar --name in_FilteredDT --type DataTable --parameter 
+defVar --name in_Config --type StringDictionary --innertype String --parameter 
+defVar --name out_bFilteredDTEmpty --type Boolean --output 
+defVar --name in_sPathToFrame --type String --parameter 
+defVar --name out_FilteredDT --type DataTable --output 
+defVar --name in_sUpdatedID --type String --parameter 
+defVar --name sCallId_CurrentTrans --type String
+defVar --name iStatus --type Numeric
+defVar --name sStatus --type String
+defVar --name sAuthTokenURL_Endpoint --type String
+defVar --name bSuccess_Http --type Boolean
+defVar --name sResponse_Http --type String
+defVar --name iStatusCode_Http --type Numeric
+defVar --name sAuthUsr --type String
+defVar --name sAuthPwd --type String
+defVar --name AuthToken_Http --type String
+defVar --name Headers --type StringDictionary --innertype String
+defVar --name sStatus_Http --type String
+defVar --name sCallStatus_Http --type String
+defVar --name sCalledOn_Http --type String
+defVar --name sCallDuration_Http --type String
+defVar --name sCallInfoURL --type String
+defVar --name sStrReplace_EndPoint_CallInfo --type String
+defVar --name sMainRunTime_CurrentTrans --type String
+defVar --name sInputFolderName_CurrentTrans --type String
+defVar --name sLineNumberInDSFile_CurrentTrans --type String
+defVar --name dMainRunTime_CurrentTrans --type DateTime
+defVar --name sCallStatusToLower_Http --type String
+defVar --name sOutputFile_FullPath_CurrentTrans --type String
+defVar --name ex --type Excel
+defVar --name sSheetName --type String
+defVar --name dtCalls --type DataTable
+defVar --name iTotalRowsOf_dtCalls --type Numeric
+defVar --name iLineNumberInDSFile_CurrentTrans --type Numeric
+defVar --name iTotalRowsOf_dtFilteredCalls --type Numeric
+defVar --name sDateFormat --type String
+defVar --name sPrefix_CurrentTrans --type String
+defVar --name sPathToCurrentProcessingFolder --type String
+defVar --name bFileExists --type Boolean
+defVar --name sPathToInputFiles --type String
+defVar --name sConstantConfigFileName --type String
+defVar --name sArchiveFolderName --type String
+defVar --name sFileSuffix --type String
+defVar --name sFileNameWithPrefix_CurrentTrans --type String
+defVar --name sFileExtension --type String
+defVar --name sRegexExtension --type String
+defVar --name bMovedSuccessfully --type Boolean
+defVar --name sMailSubjectFinalEmail --type String
+defVar --name sMailCredentials --type String
+defVar --name sSendFinalMailList --type String
+defVar --name MailList --type List --innertype String
+defVar --name username --type String
+defVar --name password --type SecureString
+defVar --name newMailConn --type EmailConnection
+defVar --name dCurrentDateTime --type DateTime
+defVar --name sRegexCampaignPattern --type String
+defVar --name sCampaign --type String
+defVar --name sServiceStatusURL --type String
+defVar --name iTimeoutInMiliseconds --type Numeric
+//# In this module we need to catch business exceptions where it is possible by  set value to out_BusinessExceptionMsg
+//#In this module we process data from Queue one by one
+//#in_Config ;in_FilteredDT ; in_sPathToFrame ; in_sUpdatedID ;
+
+strDictGet --key Timeout --dictionary ${in_Config} --comment "Timeout in miliseconds" iTimeoutInMiliseconds=value
+logMessage --message "-- Process Starting --" --type "Info"
+setVar --name "${out_BusinessExceptionMsg}"
+logMessage --message "Process UpdateID: ${in_sUpdatedID}" --type "Info"
+setVar --name "${out_FilteredDT}" --value "${in_FilteredDT}"
+logMessage --message "\r\n${in_FilteredDT}" --type "Info"
+//convertStringToNumber --text "${in_sUpdatedID}" iUpdatedID=value
+if --left "${in_FilteredDT}" --operator "Is_Null" --negate 
+	findColumnByName --dataTable ${in_FilteredDT} --name Status iStatus=value
+	getTableCell --dataTable ${in_FilteredDT} --column ${iStatus} --row 1 sStatus=value
+	
+	case --name case1 --switches "AtLeast" --minimum 1 --comment "At Least 1"
+		when --left "${sStatus}" --operator "Equal_To" --right Success1 --comment "sStatus == Success1"
+		//when --left "${sStatus}" --operator "Equal_To" --right Failed
+	then
+		
+		
+		goSub --label GetInfoFromQueue --comment GetInfoFromQueue
+		
+		strDictGet --key CallInfoURL --dictionary ${in_Config} --comment "Call Info End Point Before String Replace" sCallInfoURL=value
+		strDictGet --key CallIdStringReplace --dictionary ${in_Config} --comment "String Replace" sStrReplace_EndPoint_CallInfo=value
+		
+		replaceText --texttoparse "${sCallInfoURL}" --textpattern "${sStrReplace_EndPoint_CallInfo}" --replacement "${sCallId_CurrentTrans}" --comment "Call Info End Point After String Replace" sCallInfoURL=value
+		
+		strDictGet --key AuthTokenURL --dictionary ${in_Config} --comment "Auth Token End Point" sAuthTokenURL_Endpoint=value
+		
+		strDictGet --key T2SServiceUser --dictionary ${in_Config} --comment "Auth Username" sAuthUsr=value
+		strDictGet --key T2SServicePassword --dictionary ${in_Config} --comment "Auth Password" sAuthPwd=value
+		
+		strDictAdd --key ContentType --value "application/json" --dictionary ${Headers}
+		goSub --label HTTP_GET_AuthToken
+		strDictAdd --key Authorization --value "Bearer ${AuthToken_Http}" --dictionary ${headers}
+		
+		
+		strDictGet --key ServiceStatusURL --dictionary ${in_Config} --comment "Service status end point" sServiceStatusURL=value
+		
+		httpRequest --verb "Get" --url "${sServiceStatusURL}" --headers ${Headers} --noproxy  --timeout "${iTimeoutInMiliseconds}" --comment "Service Status Get Request" bSuccess_Http=success sResponse_Http=value iStatusCode_Http=statusCode
+		goSub --label Process_End_Timeout --comment Timeout
+		if --left "${sResponse_Http}" --operator "Equal_To" --right "{\"is_running\":true}"
+			
+			httpRequest --verb "Get" --url "${sCallInfoURL}" --headers ${Headers} --noproxy  --timeout "${iTimeoutInMiliseconds}" bSuccess_Http=success sResponse_Http=value iStatusCode_Http=statusCode
+			goSub --label Process_End_Timeout --comment Timeout
+			
+			
+			mapJson --json "${sResponse_Http}" --mappings "$.status=${sStatus_Http}" --comment Status
+			changeTextCase --text "${sStatus_Http}" --type "Lower" sStatus_Http=value
+			
+			if --left "${sStatus_Http}" --operator "Equal_To" --right finished
+				mapJson --json "${sResponse_Http}" --mappings "$.call_status=${sCallStatus_Http}" --comment "Call Status"
+				changeTextCase --text "${sCallStatus_Http}" --type "Lower" sCallStatusToLower_Http=value
+				
+				if --left "${sCallStatusToLower_Http}" --operator "Equal_To" --right "playback failed" --comment "Call Status Is Incomprehensible"
+					setVar --name "${sCallStatus_Http}" --value "Canceled by user"
+				elseIf --left "${sCallStatusToLower_Http}" --operator "Equal_To" --right "can\'t connect" --comment "Call Status Is Incomprehensible"
+					setVar --name "${sCallStatus_Http}" --value "---"
+				endIf
+				
+				mapJson --json "${sResponse_Http}" --mappings "$.called_on=${sCalledOn_Http}" --comment "Called On"
+				mapJson --json "${sResponse_Http}" --mappings "$.duration=${sCallDuration_Http}" --comment Duration
+				
+				strDictGet --key PathToInputFiles --dictionary ${in_Config} --comment "Path To Cloud/Main" sPathToInputFiles=value
+				
+				textToDateTime --culture "en-US" --text "${sMainRunTime_CurrentTrans}" --comment "Main Run Time from Queue" dMainRunTime_CurrentTrans=value
+				concatTexts --text "${dMainRunTime_CurrentTrans.Year}_${dMainRunTime_CurrentTrans.Month}_${dMainRunTime_CurrentTrans.Day}_${dMainRunTime_CurrentTrans.Hour}${dMainRunTime_CurrentTrans.Minute}${dMainRunTime_CurrentTrans.Second}" --value _ --comment Prefix sPrefix_CurrentTrans=value
+				concatTexts --text "${sPathToInputFiles}\\" --value "${sInputFolderName_CurrentTrans}" --comment "Current Processing Folder Path" sPathToCurrentProcessingFolder=value
+				concatTexts --text "${sPathToCurrentProcessingFolder}\\" --value "${sFileNameWithPrefix_CurrentTrans}" --comment "Full File Path To Input File Read For Processing" sOutputFile_FullPath_CurrentTrans=value
+				
+				ifFile --file "${sOutputFile_FullPath_CurrentTrans}" bFileExists=value
+				if --left "${bFileExists}" --operator "Is_True" --negate 
+					setVar --name "${out_BusinessExceptionMsg}" --value "Input File ${sFileNameWithPrefix_CurrentTrans} missing at ${sPathToCurrentProcessingFolder}"
+					failTest --message "${out_BusinessExceptionMsg}"
+				endIf
+				//~~~~~~~~~~~~~~~~ Add Values To Source File [Start]
+				
+				excelOpen --file "${sOutputFile_FullPath_CurrentTrans}" ex=value
+				strDictGet --key InputFileSheetName --dictionary ${in_Config} sSheetName=value
+				convertStringToNumber --culture "en-US" --text "${sLineNumberInDSFile_CurrentTrans}" iLineNumberInDSFile_CurrentTrans=value
+				evaluate --expression "${iLineNumberInDSFile_CurrentTrans} - 1" iLineNumberInDSFile_CurrentTrans=value
+				excelGetTable --file ${ex} --sheet "${sSheetName}" --entiretable  --hasheaders  dtCalls=value iTotalRowsOf_dtCalls=rows
+				removeEmpty --datastructure ${dtCalls}
+				updateRow --index ${iLineNumberInDSFile_CurrentTrans} --valuesmapping "CallDateTime=${sCalledOn_Http},CallStatus=${sCallStatus_Http},CallDuration=${sCallDuration_Http}" --dataTable ${dtCalls}
+				excelSetTable --dataTable ${dtCalls} --headers  --file ${ex} --sheet "${sSheetName}" --row 1 --column 1
+				excelClose --file ${ex} --save  --comment "??? Change Location at the end of script???"
+				//~~~~~~~~~~~~~~~~ Add Values To Source File [End]
+				
+				//~~~~~~~~~~~~~~~~ Update Transaction Queue [Start]
+				updateRow --index 1 --valuesmapping "Status=Success2,CallStatus=${sCallStatus_Http},CallDuration=${sCallDuration_Http},CallDateTime=${sCalledOn_Http}" --dataTable ${in_FilteredDT}
+				//~~~~~~~~~~~~~~~~ Update Transaction Queue [End]
+				
+				
+				
+				filterTable --where "([CallStatus]=\'\' and [CampaignName]<>\'\')" --dataTable ${dtCalls} iTotalRowsOf_dtFilteredCalls=rows
+				if --left "${iTotalRowsOf_dtFilteredCalls}" --operator "Equal_To" --right 0
+					strDictGet --key ArchiveFolderName --dictionary ${in_Config} --comment "Archive Folder Name" sArchiveFolderName=value
+					strDictGet --key FinalFileSuffix --dictionary ${in_Config} --comment "File Suffix" sFileSuffix=value
+					strDictGet --key RegexExtension --dictionary ${in_Config} --comment "Regex Pattern For File Extension Extraction" sRegexExtension=value
+					getRegex --text "${sFileNameWithPrefix_CurrentTrans}" --regexPattern "${sRegexExtension}" --regexOptions "0" --groupnumber 1 --comment "File Name Without File Extension" sFileExtension=value
+					
+					strDictGet --key RegexCampaign --dictionary ${in_Config} --comment "Camaign Regex Pattern" sRegexCampaignPattern=value
+					getRegex --text "${sFileNameWithPrefix_CurrentTrans}" --regexPattern "${sRegexCampaignPattern}" --regexOptions "0" --groupnumber 1 sCampaign=value
+					replaceText --texttoparse "${sFileNameWithPrefix_CurrentTrans}" --textpattern ".${sFileExtension}" sFileNameWithPrefix_CurrentTrans=value
+					fileRename --file "${sOutputFile_FullPath_CurrentTrans}" --newname "${sFileNameWithPrefix_CurrentTrans}${sFileSuffix}.${sFileExtension}" sOutputFile_FullPath_CurrentTrans=value
+					//setVar --name "${sFileNameWithPrefix_CurrentTrans}" --value "${sFileNameWithPrefix_CurrentTrans}.${sFileExtension}"
+					
+					delay --timeout "00:00:01"
+					fileMove --from "${sOutputFile_FullPath_CurrentTrans}" --to "${sPathToCurrentProcessingFolder}\\${sArchiveFolderName}" --comment "Moving Source File To Archive Directory" bMovedSuccessfully=value
+					if --left "${bMovedSuccessfully}" --operator "Is_True"
+						getCurrentDateAndTime --localorutc "LocalTime" dCurrentDateTime=value
+						logMessage --message "--Successfully Moved File--\r\nFrom: ${sOutputFile_FullPath_CurrentTrans}\r\nTo: ${sPathToCurrentProcessingFolder}\\${sArchiveFolderName}" --type "Info"
+						goSub --label Delete_ConstantConfigFile
+						goSub --label Send_Notification_Email
+					else
+						setVar --name "${out_BusinessExceptionMsg}" --value "Failed to move file ${sOutputFile_FullPath_CurrentTrans} to Archive folder"
+						failTest --message "${out_BusinessExceptionMsg}"
+					endIf
+					
+				endIf
+			else --comment "Logic if Call status is diffrent from \"finished\""
+			endIf
+		else
+			stopExecution
+		endIf
+		//updateRow --index 1 --valuesmapping "Stage=Stage 2 Complete" --dataTable ${in_FilteredDT}
+	endCase
+	
+else
+	logMessage --message "\"File FilteredTD is empty not Transaction for processing\"" --type "Info"
+	setVar --name "${out_bFilteredDTEmpty}" --value true
+endIf
+logMessage --message "out_BusinessExceptionMsg: ${out_BusinessExceptionMsg}\r\n" --type "Info"
+setVar --name "${out_FilteredDT}" --value "${in_FilteredDT}"
+logMessage --message "-- Process Ending --" --type "Info"
+beginSub --name GetInfoFromQueue
+//findColumnByName --dataTable ${in_FilteredDT} --name ID --comment "Find idx ID" iIDColumnName=value
+//getTableCell --dataTable ${in_FilteredDT} --column ${iIDColumnName} --row 1 --comment "Get sID" sID=value
+mapTableRow --dataTable ${in_FilteredDT} --row 1 --mappings "name=Callid=${sCallId_CurrentTrans},name=MainRunTime=${sMainRunTime_CurrentTrans},name=FolderOfInputFile=${sInputFolderName_CurrentTrans},name=InputDataSourceFileName=${sFileNameWithPrefix_CurrentTrans},name=LineNumberDSfile=${sLineNumberInDSFile_CurrentTrans}"
+endSub
+beginSub --name HTTP_GET_AuthToken
+httpRequest --verb "Post" --url "${sAuthTokenURL_Endpoint}" --headers ${Headers} --formatter "Json" --source "{ \"user\": \"${sAuthUsr}\", \"pwd\": \"${sAuthPwd}\" }" --cookiecontainer  --timeout "${iTimeoutInMiliseconds}" --comment "Auth Token HTTP Request" bSuccess_Http=success sResponse_Http=value iStatusCode_Http=statusCode
+goSub --label Process_End_Timeout --comment Timeout
+mapJson --json "${sResponse_Http}" --mappings "accessToken=${AuthToken_Http}"
+endSub
+beginSub --name Delete_ConstantConfigFile
+strDictGet --key ConstantConfigFileName --dictionary ${in_Config} sConstantConfigFileName=value
+ifFile --file "${sPathToCurrentProcessingFolder}\\${sPrefix_CurrentTrans}${sConstantConfigFileName}" bFileExists=value
+if --left "${bFileExists}" --operator "Is_True"
+	fileDelete --file "${sPathToCurrentProcessingFolder}\\${sPrefix_CurrentTrans}${sConstantConfigFileName}"
+	logMessage --message "Succesfully Deleted File: ${sPathToCurrentProcessingFolder}\\${sPrefix_CurrentTrans}${sConstantConfigFileName}" --type "Info"
+endIf
+endSub
+beginSub --name Send_Notification_Email
+strDictGet --key EmailCredentials --dictionary ${in_Config} --comment Ceredntials sMailCredentials=value
+strDictGet --key SendFinalMail --dictionary ${in_Config} --comment "Final Mail Reciver" sSendFinalMailList=value
+strDictGet --key MailSubjectFinalEmail --dictionary ${in_Config} --comment "Mail Subject" sMailSubjectFinalEmail=value
+splitString --text "${sSendFinalMailList}" --delimiteroption "CustomDelimiter" --customdelimiter "," MailList=value
+getVaultItem --name "${sMailCredentials}" --system  username=userName password=password
+outlookConnect --mailusername "${username}" --mailpassword "${password}" newMailConn=value
+emailSend --connection ${newMailConn} --to ${MailList} --from "${username}" --subject "${sMailSubjectFinalEmail}" --bodytype "Text" --body " ${dCurrentDateTime.Day}/ ${dCurrentDateTime.Month}/ ${dCurrentDateTime.Year}  ${dCurrentDateTime.Hour}:${dCurrentDateTime.Minute}:${dCurrentDateTime.Second} - Notification message from robot\'s execution: \r\n\r\nStatuses of calls for campaign: ${sCampaign},  file: ${sInputFolderName_CurrentTrans}\\${sArchiveFolderName}\\${sFileNameWithPrefix_CurrentTrans} collected. \n\nSee file: \n${sArchiveFolderName}\\${sFileNameWithPrefix_CurrentTrans}\nBR, \nYour PRA Robot - T2SNotifications \n" --comment "Connect to Outlook and send Error Mail"
+emailDisconnect --connection ${newMailConn}
+endSub
+beginSub --name Process_End_Timeout
+if --left "${bSuccess_Http}" --operator "Is_True" --negate 
+	logMessage --message "###Cant connect to REST API Service###" --type "Error"
+	stopExecution --current 
+endIf
+endSub*21.0.5.0

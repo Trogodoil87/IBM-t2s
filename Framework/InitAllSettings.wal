@@ -1,0 +1,56 @@
+ defVar --name in_ConfigPath --type String --parameter 
+defVar --name bConfigPathExsist --type Boolean
+defVar --name openExcel --type Excel
+defVar --name SheetIndex --type Numeric
+defVar --name in_InitAllSettingsList --type List --innertype String --parameter 
+defVar --name GetListSheet --type String
+defVar --name GetExcelTable --type DataTable
+defVar --name GetExcelTableRows --type Numeric
+defVar --name GetExcelTableColumns --type Numeric
+defVar --name index --type Numeric
+defVar --name GetExcelKey --type String
+defVar --name GetExcelValue --type String
+defVar --name out_Config --type StringDictionary --innertype String --output 
+defVar --name SCXVersion --type String
+defVar --name in_SCXVersion --type String --parameter 
+defVar --name officeAppConfig --type OfficeApplication
+//#
+//#
+//#in_InitAllSettingsList;  in_SCXVersion; in_ConfigPath;
+//#
+//#out_Config
+logMessage --message "-- InitAllSettings: Starting --" --type "Info"
+ifFile --file "${in_ConfigPath}" bConfigPathExsist=value
+if --left "${bConfigPathExsist}" --operator "Equal_To" --right true
+	excelOpen --file "${in_ConfigPath}" openExcel=value
+	for --variable ${SheetIndex} --from 1 --to ${in_InitAllSettingsList.Count} --step 1
+		//			logMessage --message "---> ${InitAllSettingsList} -> ${SheetIndex} -> ${InitAllSettingsList.Count}" --type "Info"
+		get --collection "${in_InitAllSettingsList}" --index "${SheetIndex}" GetListSheet=value
+		//			logMessage --message "GetListSheet:  ${GetListSheet}" --type "Info"
+		excelGetTable --file ${openExcel} --sheet "${GetListSheet}" --entiretable  --hasheaders  GetExcelTable=value GetExcelTableRows=rows GetExcelTableColumns=columns
+		incrementVar --number ${GetExcelTableRows}
+		for --variable ${index} --from 2 --to ${GetExcelTableRows} --step 1
+			excelGet --file ${openExcel} --sheet "${GetListSheet}" --row ${index} --column 1 GetExcelKey=value
+			excelGet --file ${openExcel} --sheet "${GetListSheet}" --row ${index} --column 2 GetExcelValue=value
+			if --left "${GetExcelKey}" --operator "Is_Null_Or_Empty" --negate 
+				if --left "${GetExcelValue}" --operator "Is_Null_Or_Empty" --negate 
+					strDictAdd --key "${GetExcelKey}" --value "${GetExcelValue}" --dictionary ${out_Config}
+				endIf
+			endIf
+		next
+	next
+endIf
+if --left "${out_Config.Count}" --operator "Equal_To" --right 0 --negate 
+	logMessage --message "-- IntiAllSettings: Success. Data folder found-->${in_ConfigPath},config-->lines retrieved : ${out_Config.Count} --" --type "Info"
+else
+	logMessage --message "-- IntiAllSettings: Failed. Data folder not found, config lines retrieved :${out_Config.Count} --" --type "Info"
+endIf
+strDictGet --key SCX_Template --dictionary ${out_Config} SCXVersion=value
+if --left "${SCXVersion}" --operator "Equal_To" --right "${in_SCXVersion}" --negate 
+	logMessage --message "InitAllSettings: Warning: not proper config version, expected:${in_SCXVersion}" --type "Info"
+else
+	logMessage --message "InitAllSettings: proper config version is found: ${in_SCXVersion}" --type "Info"
+endIf
+excelClose --file ${openExcel}
+//logMessage --message "\r\n${out_Config}" --type "Info"
+logMessage --message "-- InitAllSettings: Ended succesfuly --" --type "Info"*21.0.3.0
